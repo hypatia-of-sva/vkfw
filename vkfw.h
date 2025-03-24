@@ -4,7 +4,7 @@
  *------------------------------------------------------------------------
  * Copyright (c) 2002-2006 Marcus Geelnard
  * Copyright (c) 2006-2019 Camilla Löwy <elmindreda@glfw.org>
- * Copyright (c) 2024-     Hypatia of Sva <hypatia.sva@posteo.eu>
+ * Copyright (c) 2024-2025 Hypatia of Sva <hypatia.sva@posteo.eu>
  *
  * This software is provided 'as-is', without any express or implied
  * warranty. In no event will the authors be held liable for any damages
@@ -57,13 +57,13 @@ typedef uint32_t VkfwBool32;
 typedef struct VkfwInstance_t* VkfwInstance;
 /* the other four are direct matches of corresponding GLFW types. If this gets changed at some point, VkfwJoystick can also become a true handle */
 typedef struct VkfwMonitor_t* VkfwMonitor;
-typedef struct int32_t VkfwJoystick;
+typedef int32_t VkfwJoystick;
 typedef struct VkfwWindow_t* VkfwWindow;
 typedef struct VkfwCursor_t* VkfwCursor;
 
 /* Vulkan Mappings */
 #if defined(VK_VERSION_1_0)
-    #define VKFW_VKAPI_PTR VVKAPI_PTR
+    #define VKFW_VKAPI_PTR VKAPI_PTR
     typedef VkBool32 VkfwVkBool32;
     typedef VkInstance VkfwVkInstance;
     typedef VkPhysicalDevice VkfwVkPhysicalDevice;
@@ -80,9 +80,9 @@ typedef struct VkfwCursor_t* VkfwCursor;
     typedef struct VkfwVkSurfaceKHR_t* VkfwVkSurfaceKHR;
     typedef struct VkfwVkAllocationCallbacks_t* VkfwVkAllocationCallbacks;  /* can be treated as oblique struct since only pointer to it is used */
     typedef enum VkfwVkResult {
-        VK_SUCCESS = 0,
+        VKFW_VK_SUCCESS = 0,
         /* ... */
-        VK_RESULT_MAX_ENUM = 0x7FFFFFFF
+        VKFW_VK_RESULT_MAX_ENUM = 0x7FFFFFFF
     } VkfwVkResult;
     typedef void (VKFW_VKAPI_PTR *PFN_vkfwVkVoidFunction)(void);
     typedef PFN_vkfwVkVoidFunction (VKFW_VKAPI_PTR *PFN_vkfwVkGetInstanceProcAddr)(VkfwVkInstance instance, const char* pName);
@@ -131,10 +131,10 @@ typedef enum VkfwJoystickHatState {
     VKFW_JOYSTICK_HAT_STATE_RIGHT              = 2,
     VKFW_JOYSTICK_HAT_STATE_DOWN               = 4,
     VKFW_JOYSTICK_HAT_STATE_LEFT               = 8,
-    VKFW_JOYSTICK_HAT_STATE_RIGHT_UP           = (VKFW_HAT_RIGHT | VKFW_HAT_UP),
-    VKFW_JOYSTICK_HAT_STATE_RIGHT_DOWN         = (VKFW_HAT_RIGHT | VKFW_HAT_DOWN),
-    VKFW_JOYSTICK_HAT_STATE_LEFT_UP            = (VKFW_HAT_LEFT  | VKFW_HAT_UP),
-    VKFW_JOYSTICK_HAT_STATE_LEFT_DOWN          = (VKFW_HAT_LEFT  | VKFW_HAT_DOWN),
+    VKFW_JOYSTICK_HAT_STATE_RIGHT_UP           = (VKFW_JOYSTICK_HAT_STATE_RIGHT | VKFW_JOYSTICK_HAT_STATE_UP),
+    VKFW_JOYSTICK_HAT_STATE_RIGHT_DOWN         = (VKFW_JOYSTICK_HAT_STATE_RIGHT | VKFW_JOYSTICK_HAT_STATE_DOWN),
+    VKFW_JOYSTICK_HAT_STATE_LEFT_UP            = (VKFW_JOYSTICK_HAT_STATE_LEFT  | VKFW_JOYSTICK_HAT_STATE_UP),
+    VKFW_JOYSTICK_HAT_STATE_LEFT_DOWN          = (VKFW_JOYSTICK_HAT_STATE_LEFT  | VKFW_JOYSTICK_HAT_STATE_DOWN),
     VKFW_JOYSTICK_HAT_STATE_MAX_ENUM = 0x7FFFFFFF
 } VkfwJoystickHatState;
 typedef enum VkfwKey {
@@ -361,7 +361,7 @@ typedef enum VkfwInstancePlatform {
     VKFW_INSTANCE_PLATFORM_X11           = 0x00060008,
     VKFW_INSTANCE_PLATFORM_NULL          = 0x00060010,
     VKFW_INSTANCE_PLATFORM_MAX_ENUM      = 0x7FFFFFFF
-} VkfwInstancePlatform:
+} VkfwInstancePlatform;
 typedef VkfwFlags VkfwInstancePlatformMask;
 
 typedef enum VkfwInstanceCreateFlagBits {
@@ -414,7 +414,7 @@ typedef struct VkfwImageData {
     uint8_t* pixels;
 } VkfwImageData;
 typedef struct VkfwGamepadInputState {
-    VkfwAction buttons[15];
+    uint8_t buttons[15]; /* see enum VkfwAction */
     /* in the range -1.0 to 1.0 inclusive. */
     float axes[6];
 } VkfwGamepadInputState;
@@ -444,7 +444,7 @@ typedef struct VkfwQuad {
     int32_t top;
     int32_t right;
     int32_t bottom;
-} VkfwContentScale;
+} VkfwQuad;
 typedef struct VkfwGamepadMappingElement {
     uint8_t         type;
     uint8_t         index;
@@ -469,7 +469,7 @@ typedef struct VkfwInstanceProperties {
     VkfwInstancePlatform                    usedPlatform;
     VkfwBool32                              rawMouseMotionSupported;
     VkfwBool32                              vulkanFound;
-    PFN_vkfwVkGetInstanceProcAddr           vulkanLoader
+    PFN_vkfwVkGetInstanceProcAddr           vulkanLoader;
     uint32_t                                requiredInstanceExtensionCount;
     const char**                            requiredInstanceExtensions;
     uint64_t                                timerFrequency;
@@ -489,11 +489,11 @@ typedef struct VkfwMonitorProperties {
 typedef struct VkfwJoystickProperties {
     int32_t                 joystickID;
     uint32_t                axesCount;
-    const float*            axesStates;´
+    const float*            axesStates;
     uint32_t                buttonCount;
-    VkfwAction*             buttonStates;
+    const uint8_t*          buttonStates; /* see enum VkfwAction */
     uint32_t                hatCount;
-    VkfwJoystickHatState*   hatStates;
+    const uint8_t*          hatStates; /* see enum VkfwJoystickHatState */
     const char*             name;
     const char*             GUID;
     VkfwBool32              isGamepad;
@@ -502,16 +502,6 @@ typedef struct VkfwJoystickProperties {
     VkfwBool32              gamepadStateRetrievalSuccessfull;
     void*                   userPointer;
 } VkfwJoystickProperties;
-typedef struct VkfwWindowProperties {
-    VkfwWindowState     state;
-    VkfwBool32          focused;
-    VkfwBool32          transparentFramebuffer;
-    VkfwBool32          hovered;
-    VkfwExtent2D        framebufferSize;
-    VkfwQuad            frameSize;
-    VkfwContentScale    contentScale;
-    VkfwMonitor         monitor;
-} VkfwWindowProperties;
 typedef struct VkfwWindowState {
     /* 15 flags; can be combined into 1 uint16_t, reducing the struct by 58 bytes to ~64 bytes from ca 120 bytes, almost halving it. */
     VkfwBool32      fullscreen; /* with this off, the monitor is curently ignored, but one could move the window to the monitor in windowed mode on certain platforms */
@@ -537,14 +527,24 @@ typedef struct VkfwWindowState {
     float           opacity;
     void*           pUserPointer;
 } VkfwWindowState;
+typedef struct VkfwWindowProperties {
+    VkfwWindowState     state;
+    VkfwBool32          focused;
+    VkfwBool32          transparentFramebuffer;
+    VkfwBool32          hovered;
+    VkfwExtent2D        framebufferSize;
+    VkfwQuad            frameSize;
+    VkfwContentScale    contentScale;
+    VkfwMonitor         monitor;
+} VkfwWindowProperties;
 
-typedef void* (VKAPI_PTR *PFN_vkfwAllocationFunction)(
+typedef void* (VKFW_VKAPI_PTR *PFN_vkfwAllocationFunction) (
     size_t                                      size,
     void*                                       pUserData);
-typedef void (VKAPI_PTR *PFN_vkfwFreeFunction)(
+typedef void (VKFW_VKAPI_PTR *PFN_vkfwFreeFunction) (
     void*                                       pMemory,
     void*                                       pUserData);
-typedef void* (VKAPI_PTR *PFN_vkfwReallocationFunction)(
+typedef void* (VKFW_VKAPI_PTR *PFN_vkfwReallocationFunction) (
     void*                                       pOriginal,
     size_t                                      size,
     void*                                       pUserData);
@@ -622,7 +622,7 @@ typedef struct VkfwWindowCreateInfo {
     VkfwWindowCreateFlags       flags;
 
     VkfwWindowState             initialState;
-    VkfwVideoMode               requestedVideoMode; //size has to be the same as in initalState
+    VkfwVideoMode               requestedVideoMode; /*size has to be the same as in initalState*/
     VkfwWindowCallbacks         callbacks;
 
     const char*                 cocoaFrameName_COCOA;
@@ -683,7 +683,7 @@ typedef VkfwVkResult (VKFWAPI_PTR *PFN_vkfwVkCreateWindowSurface)(VkfwVkInstance
 #ifndef VKFW_NO_PROTOTYPES
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwEnumerateGlobalProperties(VkfwGlobalProperties* pProperties);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwCreateInstance(const VkfwInstanceCreateInfo* pCreateInfo, const VkfwAllocationCallbacks* pAllocator, VkfwInstance* pInstance);
-VKFWAPI_ATTR void         VKFWAPI_CALL vkfwDestroyInstance(VkfwInstance instance, const VkfwAllocationCallbacks* pAllocator);
+VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwDestroyInstance(VkfwInstance instance, const VkfwAllocationCallbacks* pAllocator);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwEnumerateInstanceProperties(VkfwInstance instance, VkfwInstanceProperties* pProperties);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwGetKeyScancode(VkfwInstance instance, VkfwKey key, int32_t* pScancode);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwGetKeyName(VkfwInstance instance, VkfwKey key, int32_t scancode, const char** pKeyName);
@@ -698,7 +698,7 @@ VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwSetMonitorUserPointer(VkfwMonitor mon
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwSetMonitorGammaRamp(VkfwMonitor monitor, const VkfwGammaRamp* pGammaRamp);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwGetGammeRampFromGammaValue(VkfwMonitor monitor, float gamma, VkfwGammaRamp* pGammaRamp);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwCreateWindow(VkfwMonitor monitor, const VkfwWindowCreateInfo* pCreateInfo, const VkfwAllocationCallbacks* pAllocator, VkfwWindow* pWindow);
-VKFWAPI_ATTR void         VKFWAPI_CALL vkfwDestroyWindow(VkfwWindow window, const VkfwAllocationCallbacks* pAllocator);
+VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwDestroyWindow(VkfwWindow window, const VkfwAllocationCallbacks* pAllocator);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwEnumerateWindowProperties(VkfwWindow window, VkfwWindowProperties* pProperties);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwSetWindowState(VkfwWindow window, VkfwWindowState newState);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwSetWindowIcon(VkfwWindow window, uint32_t imageCount, const VkfwImageData* images);
@@ -708,7 +708,7 @@ VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwRequestWindowAttention(VkfwWindow win
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwSetWindowAspectRatio(VkfwWindow window, int32_t numerator, int32_t denominator);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwSetWindowSizeLimits(VkfwWindow window, VkfwExtent2D minimum, VkfwExtent2D maximum);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwCreateCursor(VkfwInstance instance, const VkfwCursorCreateInfo* pCreateInfo, const VkfwAllocationCallbacks* pAllocator, VkfwCursor* pCursor);
-VKFWAPI_ATTR void         VKFWAPI_CALL vkfwDestroyCursor(VkfwCursor cursor, const VkfwAllocationCallbacks* pAllocator);
+VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwDestroyCursor(VkfwCursor cursor, const VkfwAllocationCallbacks* pAllocator);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwSetWindowCursor(VkfwWindow window, VkfwCursor cursor);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwUpdateGamepadMappings(VkfwInstance instance, uint32_t mappingCount, const VkfwGamepadMapping* mappings);
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwEnumerateJoysticks(VkfwInstance instance, uint32_t* pJoystickCount, VkfwJoystick* pJoysticks);
