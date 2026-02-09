@@ -43,7 +43,7 @@ extern "C" {
 #define VKFWAPI_CALL 
 
 #define VKFW_VERSION_MAJOR          1
-#define VKFW_VERSION_MINOR          0
+#define VKFW_VERSION_MINOR          1
 #define VKFW_VERSION_REVISION       0
 
 #define VKFW_FALSE                  0U

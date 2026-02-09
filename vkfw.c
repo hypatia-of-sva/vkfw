@@ -25,18 +25,8 @@ VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwEnumerateGlobalProperties(VkfwGlobalP
     pProperties[0].majorVersion                = VKFW_VERSION_MAJOR;
     pProperties[0].minorVersion                = VKFW_VERSION_MINOR;
     pProperties[0].revisionVersion             = VKFW_VERSION_REVISION;
-    pProperties[0].underlyingVersionString     = glfwGetVersionString();
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
-    pProperties[0].supportedPlatforms         |= VKFW_INSTANCE_PLATFORM_WIN32   * glfwPlatformSupported(GLFW_PLATFORM_WIN32);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
-    pProperties[0].supportedPlatforms         |= VKFW_INSTANCE_PLATFORM_COCOA   * glfwPlatformSupported(GLFW_PLATFORM_COCOA);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
-    pProperties[0].supportedPlatforms         |= VKFW_INSTANCE_PLATFORM_WAYLAND * glfwPlatformSupported(GLFW_PLATFORM_WAYLAND);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
-    pProperties[0].supportedPlatforms         |= VKFW_INSTANCE_PLATFORM_X11     * glfwPlatformSupported(GLFW_PLATFORM_X11);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
-    pProperties[0].supportedPlatforms         |= VKFW_INSTANCE_PLATFORM_NULL    * glfwPlatformSupported(GLFW_PLATFORM_NULL);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
+    pProperties[0].underlyingVersionString     = "VKFW 1.1 Native Starter Win32 X11, based on GLFW 3.4.0 code";    
+    pProperties[0].supportedPlatforms         = VKFW_INSTANCE_PLATFORM_WIN32 | VKFW_INSTANCE_PLATFORM_X11 | VKFW_INSTANCE_PLATFORM_NULL;
     return VKFW_SUCCESS;
 }
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwCreateInstance(const VkfwInstanceCreateInfo* pCreateInfo, const VkfwAllocationCallbacks* pAllocator, VkfwInstance* pInstance) {    
