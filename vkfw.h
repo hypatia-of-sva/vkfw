@@ -111,6 +111,7 @@ typedef enum VkfwStructureType {
     VKFW_STRUCTURE_TYPE_INSTANCE_CREATE_INFO            = 0,
     VKFW_STRUCTURE_TYPE_WINDOW_CREATE_INFO              = 1,
     VKFW_STRUCTURE_TYPE_CURSOR_CREATE_INFO              = 2,
+    VKFW_STRUCTURE_TYPE_INSTANCE_SYSTEM_REFERENCE_INFO  = 3,
 
     VKFW_STRUCTURE_TYPE_MAX_ENUM                        = 0x7FFFFFFF
 } VkfwStructureType;
@@ -555,6 +556,16 @@ typedef struct VkfwAllocationCallbacks {
     PFN_vkfwFreeFunction                      pfnFree;
 } VkfwAllocationCallbacks;
 
+#define VKFW_GLOBAL_HANDLE NULL
+typedef void* (* VkfwModuleOpen)(const char* name, int32_t flags);
+typedef void* (* VkfwModuleLoad)(void* handle, const char* name);
+typedef void  (* VkfwModuleClose)(void* handle);
+typedef struct VkfwModuleOperations {
+    VkfwModuleOpen      open;
+    VkfwModuleLoad      load;
+    VkfwModuleClose     close;
+} VkfwModuleOperations;
+
 typedef void (* VkfwInstanceMonitorConnectionCallback)(VkfwMonitor monitor, VkfwConnectionEvent event);
 typedef void (* VkfwInstanceJoystickConnectionCallback)(VkfwJoystick jid, VkfwConnectionEvent event);
 
@@ -615,6 +626,14 @@ typedef struct VkfwInstanceCreateInfo {
     PFN_vkfwVkGetInstanceProcAddr           desiredVulkanLoader;
     VkfwInstanceCallbacks                   callbacks;
 } VkfwInstanceCreateInfo;
+/* For the pNext-Chain of VkfwInstanceCreateInfo; _required_ in the starter-environment */
+typedef struct VkfwInstanceSystemReferenceInfo {
+    VkfwStructureType                       sType;
+    const void*                             pNext;
+    VkfwInstanceCreateFlags                 flags;
+    
+    VkfwModuleOperations                    desiredModuleOperations;
+} VkfwInstanceSystemReferenceInfo;
 
 typedef struct VkfwWindowCreateInfo {
     VkfwStructureType           sType;
