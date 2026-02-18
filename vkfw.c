@@ -5,7 +5,8 @@
 
 #include "vkfw.h"
 
-
+enum { WIN32, LINUX, UNKNOWN } platform = UNKNOWN;
+VkfwModuleOperations OSModule;
 VkfwBool32 vfkwInstanceInitialized = VKFW_FALSE;
 uint32_t instanceHandleAddress = 0;
 const VkfwAllocationCallbacks* initAllocator = NULL;
@@ -20,13 +21,309 @@ typedef struct VkfwWindow_t {
     VkfwVideoMode   usedVideoMode;
 } VkfwWindow_t;
 
+
+
+/*
+
+
+
+    switch(platform) {
+        case WIN32:
+        break;
+        case LINUX:
+        break;
+        default: return VKFW_ERROR_UNKNOWN;
+    }
+
+
+*/
+
+
+
+void* open_lib_options(char** names, int names_count) {
+    void* handle = NULL;
+    for(int i = 0; i < names_count; i++) {
+        handle = OSModule.open(names[i], VKFW_DEFAULT_FLAGS);
+        if(handle != NULL) break;
+    }
+    return handle;
+}
+
+
+struct {
+    .... // from win32_platform.h
+} win32
+bool win32_load_libs(void) {
+    win32.user32.instance = OSModule.open("user32.dll", VKFW_DEFAULT_FLAGS);
+    if (!_glfw.win32.user32.instance) {
+        return false;
+    }
+    win32.user32.SetProcessDPIAware_            = (PFN_SetProcessDPIAware)              OSModule.load(win32.user32.instance, "SetProcessDPIAware");
+    win32.user32.ChangeWindowMessageFilterEx_   = (PFN_ChangeWindowMessageFilterEx)     OSModule.load(win32.user32.instance, "ChangeWindowMessageFilterEx");
+    win32.user32.EnableNonClientDpiScaling_     = (PFN_EnableNonClientDpiScaling)       OSModule.load(win32.user32.instance, "EnableNonClientDpiScaling");
+    win32.user32.SetProcessDpiAwarenessContext_ = (PFN_SetProcessDpiAwarenessContext)   OSModule.load(win32.user32.instance, "SetProcessDpiAwarenessContext");
+    win32.user32.GetDpiForWindow_               = (PFN_GetDpiForWindow)                 OSModule.load(win32.user32.instance, "GetDpiForWindow");
+    win32.user32.AdjustWindowRectExForDpi_      = (PFN_AdjustWindowRectExForDpi)        OSModule.load(win32.user32.instance, "AdjustWindowRectExForDpi");
+    win32.user32.GetSystemMetricsForDpi_        = (PFN_GetSystemMetricsForDpi)          OSModule.load(win32.user32.instance, "GetSystemMetricsForDpi");
+    
+    win32.dinput8.instance = OSModule.open("dinput8.dll", VKFW_DEFAULT_FLAGS);
+    if (win32.dinput8.instance != NULL) {
+        win32.dinput8.Create                    = (PFN_DirectInput8Create)              OSModule.load(win32.dinput8.instance, "DirectInput8Create");
+    }
+    
+    const char** xinput_names = {"xinput1_4.dll", "xinput1_3.dll", "xinput9_1_0.dll", "xinput1_2.dll", "xinput1_1.dll"};
+    win32.xinput.instance = open_lib_options(xinput_names, sizeof(xinput_names)/sizeof(char*));
+    if (win32.xinput.instance != NULL) {
+        win32.xinput.GetCapabilities    = (PFN_XInputGetCapabilities)   OSModule.load(win32.xinput.instance, "XInputGetCapabilities");
+        win32.xinput.GetState           = (PFN_XInputGetState)          OSModule.load(win32.xinput.instance, "XInputGetState");
+    }
+
+    win32.dwmapi.instance = OSModule.load("dwmapi.dll", VKFW_DEFAULT_FLAGS);
+    if (win32.dwmapi.instance != NULL)
+    {
+        win32.dwmapi.IsCompositionEnabled   = (PFN_DwmIsCompositionEnabled)     OSModule.load(win32.dwmapi.instance, "DwmIsCompositionEnabled");
+        win32.dwmapi.Flush                  = (PFN_DwmFlush)                    OSModule.load(win32.dwmapi.instance, "DwmFlush");
+        win32.dwmapi.EnableBlurBehindWindow = (PFN_DwmEnableBlurBehindWindow)   OSModule.load(win32.dwmapi.instance, "DwmEnableBlurBehindWindow");
+        win32.dwmapi.GetColorizationColor   = (PFN_DwmGetColorizationColor)     OSModule.load(win32.dwmapi.instance, "DwmGetColorizationColor");
+    }
+
+    win32.shcore.instance = OSModule.load("shcore.dll", VKFW_DEFAULT_FLAGS);
+    if (win32.shcore.instance != NULL)
+    {
+        win32.shcore.SetProcessDpiAwareness_    = (PFN_SetProcessDpiAwareness)  OSModule.load(win32.shcore.instance, "SetProcessDpiAwareness");
+        win32.shcore.GetDpiForMonitor_          = (PFN_GetDpiForMonitor)        OSModule.load(win32.shcore.instance, "GetDpiForMonitor");
+    }
+
+    win32.ntdll.instance = OSModule.load("ntdll.dll", VKFW_DEFAULT_FLAGS);
+    if (win32.ntdll.instance != NULL)
+    {
+        win32.ntdll.RtlVerifyVersionInfo_       = (PFN_RtlVerifyVersionInfo)    OSModule.load(win32.ntdll.instance, "RtlVerifyVersionInfo");
+    }
+    
+    return true;
+}
+void win32_unload_libs(void) {
+}
+
+struct {
+    .... // from x11_platform.h + XInitThreads, XrmInitialize, XOpenDisplay
+} x11
+bool linux_load_libs(void) {
+    const char** xlib_names = {"libX11.so.6", "libX11.so", "libX11-6.so"};
+    x11.xlib.handle = open_lib_options(xlib_names, sizeof(xlib_names)/sizeof(char*));
+    if(x11.xlib.handle == NULL) {
+        return false;
+    }
+    
+    x11.xlib.XInitThreads                     = (PFN_XInitThreads)                        OSModule.load(x11.xlib.handle, "XInitThreads");
+    x11.xlib.XrmInitialize                    = (PFN_XrmInitialize)                       OSModule.load(x11.xlib.handle, "XrmInitialize");
+    x11.xlib.XOpenDisplay                     = (PFN_XOpenDisplay)                        OSModule.load(x11.xlib.handle, "XOpenDisplay");
+    if(x11.xlib.XInitThreads == NULL || x11.xlib.XrmInitialize == NULL || x11.xlib.XOpenDisplay == NULL) {
+        return false;
+    }
+    
+    x11.xlib.AllocClassHint                   = (PFN_XAllocClassHint)                     OSModule.load(x11.xlib.handle, "XAllocClassHint");
+    x11.xlib.AllocSizeHints                   = (PFN_XAllocSizeHints)                     OSModule.load(x11.xlib.handle, "XAllocSizeHints");
+    x11.xlib.AllocWMHints                     = (PFN_XAllocWMHints)                       OSModule.load(x11.xlib.handle, "XAllocWMHints");
+    x11.xlib.ChangeProperty                   = (PFN_XChangeProperty)                     OSModule.load(x11.xlib.handle, "XChangeProperty");
+    x11.xlib.ChangeWindowAttributes           = (PFN_XChangeWindowAttributes)             OSModule.load(x11.xlib.handle, "XChangeWindowAttributes");
+    x11.xlib.CheckIfEvent                     = (PFN_XCheckIfEvent)                       OSModule.load(x11.xlib.handle, "XCheckIfEvent");
+    x11.xlib.CheckTypedWindowEvent            = (PFN_XCheckTypedWindowEvent)              OSModule.load(x11.xlib.handle, "XCheckTypedWindowEvent");
+    x11.xlib.CloseDisplay                     = (PFN_XCloseDisplay)                       OSModule.load(x11.xlib.handle, "XCloseDisplay");
+    x11.xlib.CloseIM                          = (PFN_XCloseIM)                            OSModule.load(x11.xlib.handle, "XCloseIM");
+    x11.xlib.ConvertSelection                 = (PFN_XConvertSelection)                   OSModule.load(x11.xlib.handle, "XConvertSelection");
+    x11.xlib.CreateColormap                   = (PFN_XCreateColormap)                     OSModule.load(x11.xlib.handle, "XCreateColormap");
+    x11.xlib.CreateFontCursor                 = (PFN_XCreateFontCursor)                   OSModule.load(x11.xlib.handle, "XCreateFontCursor");
+    x11.xlib.CreateIC                         = (PFN_XCreateIC)                           OSModule.load(x11.xlib.handle, "XCreateIC");
+    x11.xlib.CreateRegion                     = (PFN_XCreateRegion)                       OSModule.load(x11.xlib.handle, "XCreateRegion");
+    x11.xlib.CreateWindow                     = (PFN_XCreateWindow)                       OSModule.load(x11.xlib.handle, "XCreateWindow");
+    x11.xlib.DefineCursor                     = (PFN_XDefineCursor)                       OSModule.load(x11.xlib.handle, "XDefineCursor");
+    x11.xlib.DeleteContext                    = (PFN_XDeleteContext)                      OSModule.load(x11.xlib.handle, "XDeleteContext");
+    x11.xlib.DeleteProperty                   = (PFN_XDeleteProperty)                     OSModule.load(x11.xlib.handle, "XDeleteProperty");
+    x11.xlib.DestroyIC                        = (PFN_XDestroyIC)                          OSModule.load(x11.xlib.handle, "XDestroyIC");
+    x11.xlib.DestroyRegion                    = (PFN_XDestroyRegion)                      OSModule.load(x11.xlib.handle, "XDestroyRegion");
+    x11.xlib.DestroyWindow                    = (PFN_XDestroyWindow)                      OSModule.load(x11.xlib.handle, "XDestroyWindow");
+    x11.xlib.DisplayKeycodes                  = (PFN_XDisplayKeycodes)                    OSModule.load(x11.xlib.handle, "XDisplayKeycodes");
+    x11.xlib.EventsQueued                     = (PFN_XEventsQueued)                       OSModule.load(x11.xlib.handle, "XEventsQueued");
+    x11.xlib.FilterEvent                      = (PFN_XFilterEvent)                        OSModule.load(x11.xlib.handle, "XFilterEvent");
+    x11.xlib.FindContext                      = (PFN_XFindContext)                        OSModule.load(x11.xlib.handle, "XFindContext");
+    x11.xlib.Flush                            = (PFN_XFlush)                              OSModule.load(x11.xlib.handle, "XFlush");
+    x11.xlib.Free                             = (PFN_XFree)                               OSModule.load(x11.xlib.handle, "XFree");
+    x11.xlib.FreeColormap                     = (PFN_XFreeColormap)                       OSModule.load(x11.xlib.handle, "XFreeColormap");
+    x11.xlib.FreeCursor                       = (PFN_XFreeCursor)                         OSModule.load(x11.xlib.handle, "XFreeCursor");
+    x11.xlib.FreeEventData                    = (PFN_XFreeEventData)                      OSModule.load(x11.xlib.handle, "XFreeEventData");
+    x11.xlib.GetErrorText                     = (PFN_XGetErrorText)                       OSModule.load(x11.xlib.handle, "XGetErrorText");
+    x11.xlib.GetEventData                     = (PFN_XGetEventData)                       OSModule.load(x11.xlib.handle, "XGetEventData");
+    x11.xlib.GetICValues                      = (PFN_XGetICValues)                        OSModule.load(x11.xlib.handle, "XGetICValues");
+    x11.xlib.GetIMValues                      = (PFN_XGetIMValues)                        OSModule.load(x11.xlib.handle, "XGetIMValues");
+    x11.xlib.GetInputFocus                    = (PFN_XGetInputFocus)                      OSModule.load(x11.xlib.handle, "XGetInputFocus");
+    x11.xlib.GetKeyboardMapping               = (PFN_XGetKeyboardMapping)                 OSModule.load(x11.xlib.handle, "XGetKeyboardMapping");
+    x11.xlib.GetScreenSaver                   = (PFN_XGetScreenSaver)                     OSModule.load(x11.xlib.handle, "XGetScreenSaver");
+    x11.xlib.GetSelectionOwner                = (PFN_XGetSelectionOwner)                  OSModule.load(x11.xlib.handle, "XGetSelectionOwner");
+    x11.xlib.GetVisualInfo                    = (PFN_XGetVisualInfo)                      OSModule.load(x11.xlib.handle, "XGetVisualInfo");
+    x11.xlib.GetWMNormalHints                 = (PFN_XGetWMNormalHints)                   OSModule.load(x11.xlib.handle, "XGetWMNormalHints");
+    x11.xlib.GetWindowAttributes              = (PFN_XGetWindowAttributes)                OSModule.load(x11.xlib.handle, "XGetWindowAttributes");
+    x11.xlib.GetWindowProperty                = (PFN_XGetWindowProperty)                  OSModule.load(x11.xlib.handle, "XGetWindowProperty");
+    x11.xlib.GrabPointer                      = (PFN_XGrabPointer)                        OSModule.load(x11.xlib.handle, "XGrabPointer");
+    x11.xlib.IconifyWindow                    = (PFN_XIconifyWindow)                      OSModule.load(x11.xlib.handle, "XIconifyWindow");
+    x11.xlib.InternAtom                       = (PFN_XInternAtom)                         OSModule.load(x11.xlib.handle, "XInternAtom");
+    x11.xlib.LookupString                     = (PFN_XLookupString)                       OSModule.load(x11.xlib.handle, "XLookupString");
+    x11.xlib.MapRaised                        = (PFN_XMapRaised)                          OSModule.load(x11.xlib.handle, "XMapRaised");
+    x11.xlib.MapWindow                        = (PFN_XMapWindow)                          OSModule.load(x11.xlib.handle, "XMapWindow");
+    x11.xlib.MoveResizeWindow                 = (PFN_XMoveResizeWindow)                   OSModule.load(x11.xlib.handle, "XMoveResizeWindow");
+    x11.xlib.MoveWindow                       = (PFN_XMoveWindow)                         OSModule.load(x11.xlib.handle, "XMoveWindow");
+    x11.xlib.NextEvent                        = (PFN_XNextEvent)                          OSModule.load(x11.xlib.handle, "XNextEvent");
+    x11.xlib.OpenIM                           = (PFN_XOpenIM)                             OSModule.load(x11.xlib.handle, "XOpenIM");
+    x11.xlib.PeekEvent                        = (PFN_XPeekEvent)                          OSModule.load(x11.xlib.handle, "XPeekEvent");
+    x11.xlib.Pending                          = (PFN_XPending)                            OSModule.load(x11.xlib.handle, "XPending");
+    x11.xlib.QueryExtension                   = (PFN_XQueryExtension)                     OSModule.load(x11.xlib.handle, "XQueryExtension");
+    x11.xlib.QueryPointer                     = (PFN_XQueryPointer)                       OSModule.load(x11.xlib.handle, "XQueryPointer");
+    x11.xlib.RaiseWindow                      = (PFN_XRaiseWindow)                        OSModule.load(x11.xlib.handle, "XRaiseWindow");
+    x11.xlib.RegisterIMInstantiateCallback    = (PFN_XRegisterIMInstantiateCallback)      OSModule.load(x11.xlib.handle, "XRegisterIMInstantiateCallback");
+    x11.xlib.ResizeWindow                     = (PFN_XResizeWindow)                       OSModule.load(x11.xlib.handle, "XResizeWindow");
+    x11.xlib.ResourceManagerString            = (PFN_XResourceManagerString)              OSModule.load(x11.xlib.handle, "XResourceManagerString");
+    x11.xlib.SaveContext                      = (PFN_XSaveContext)                        OSModule.load(x11.xlib.handle, "XSaveContext");
+    x11.xlib.SelectInput                      = (PFN_XSelectInput)                        OSModule.load(x11.xlib.handle, "XSelectInput");
+    x11.xlib.SendEvent                        = (PFN_XSendEvent)                          OSModule.load(x11.xlib.handle, "XSendEvent");
+    x11.xlib.SetClassHint                     = (PFN_XSetClassHint)                       OSModule.load(x11.xlib.handle, "XSetClassHint");
+    x11.xlib.SetErrorHandler                  = (PFN_XSetErrorHandler)                    OSModule.load(x11.xlib.handle, "XSetErrorHandler");
+    x11.xlib.SetICFocus                       = (PFN_XSetICFocus)                         OSModule.load(x11.xlib.handle, "XSetICFocus");
+    x11.xlib.SetIMValues                      = (PFN_XSetIMValues)                        OSModule.load(x11.xlib.handle, "XSetIMValues");
+    x11.xlib.SetInputFocus                    = (PFN_XSetInputFocus)                      OSModule.load(x11.xlib.handle, "XSetInputFocus");
+    x11.xlib.SetLocaleModifiers               = (PFN_XSetLocaleModifiers)                 OSModule.load(x11.xlib.handle, "XSetLocaleModifiers");
+    x11.xlib.SetScreenSaver                   = (PFN_XSetScreenSaver)                     OSModule.load(x11.xlib.handle, "XSetScreenSaver");
+    x11.xlib.SetSelectionOwner                = (PFN_XSetSelectionOwner)                  OSModule.load(x11.xlib.handle, "XSetSelectionOwner");
+    x11.xlib.SetWMHints                       = (PFN_XSetWMHints)                         OSModule.load(x11.xlib.handle, "XSetWMHints");
+    x11.xlib.SetWMNormalHints                 = (PFN_XSetWMNormalHints)                   OSModule.load(x11.xlib.handle, "XSetWMNormalHints");
+    x11.xlib.SetWMProtocols                   = (PFN_XSetWMProtocols)                     OSModule.load(x11.xlib.handle, "XSetWMProtocols");
+    x11.xlib.SupportsLocale                   = (PFN_XSupportsLocale)                     OSModule.load(x11.xlib.handle, "XSupportsLocale");
+    x11.xlib.Sync                             = (PFN_XSync)                               OSModule.load(x11.xlib.handle, "XSync");
+    x11.xlib.TranslateCoordinates             = (PFN_XTranslateCoordinates)               OSModule.load(x11.xlib.handle, "XTranslateCoordinates");
+    x11.xlib.UndefineCursor                   = (PFN_XUndefineCursor)                     OSModule.load(x11.xlib.handle, "XUndefineCursor");
+    x11.xlib.UngrabPointer                    = (PFN_XUngrabPointer)                      OSModule.load(x11.xlib.handle, "XUngrabPointer");
+    x11.xlib.UnmapWindow                      = (PFN_XUnmapWindow)                        OSModule.load(x11.xlib.handle, "XUnmapWindow");
+    x11.xlib.UnsetICFocus                     = (PFN_XUnsetICFocus)                       OSModule.load(x11.xlib.handle, "XUnsetICFocus");
+    x11.xlib.VisualIDFromVisual               = (PFN_XVisualIDFromVisual)                 OSModule.load(x11.xlib.handle, "XVisualIDFromVisual");
+    x11.xlib.WarpPointer                      = (PFN_XWarpPointer)                        OSModule.load(x11.xlib.handle, "XWarpPointer");
+    x11.xkb.FreeKeyboard                      = (PFN_XkbFreeKeyboard)                     OSModule.load(x11.xlib.handle, "XkbFreeKeyboard");
+    x11.xkb.FreeNames                         = (PFN_XkbFreeNames)                        OSModule.load(x11.xlib.handle, "XkbFreeNames");
+    x11.xkb.GetMap                            = (PFN_XkbGetMap)                           OSModule.load(x11.xlib.handle, "XkbGetMap");
+    x11.xkb.GetNames                          = (PFN_XkbGetNames)                         OSModule.load(x11.xlib.handle, "XkbGetNames");
+    x11.xkb.GetState                          = (PFN_XkbGetState)                         OSModule.load(x11.xlib.handle, "XkbGetState");
+    x11.xkb.KeycodeToKeysym                   = (PFN_XkbKeycodeToKeysym)                  OSModule.load(x11.xlib.handle, "XkbKeycodeToKeysym");
+    x11.xkb.QueryExtension                    = (PFN_XkbQueryExtension)                   OSModule.load(x11.xlib.handle, "XkbQueryExtension");
+    x11.xkb.SelectEventDetails                = (PFN_XkbSelectEventDetails)               OSModule.load(x11.xlib.handle, "XkbSelectEventDetails");
+    x11.xkb.SetDetectableAutoRepeat           = (PFN_XkbSetDetectableAutoRepeat)          OSModule.load(x11.xlib.handle, "XkbSetDetectableAutoRepeat");
+    x11.xrm.DestroyDatabase                   = (PFN_XrmDestroyDatabase)                  OSModule.load(x11.xlib.handle, "XrmDestroyDatabase");
+    x11.xrm.GetResource                       = (PFN_XrmGetResource)                      OSModule.load(x11.xlib.handle, "XrmGetResource");
+    x11.xrm.GetStringDatabase                 = (PFN_XrmGetStringDatabase)                OSModule.load(x11.xlib.handle, "XrmGetStringDatabase");
+    x11.xrm.UniqueQuark                       = (PFN_XrmUniqueQuark)                      OSModule.load(x11.xlib.handle, "XrmUniqueQuark");
+    x11.xlib.UnregisterIMInstantiateCallback  = (PFN_XUnregisterIMInstantiateCallback)    OSModule.load(x11.xlib.handle, "XUnregisterIMInstantiateCallback");
+    x11.xlib.utf8LookupString                 = (PFN_Xutf8LookupString)                   OSModule.load(x11.xlib.handle, "Xutf8LookupString");
+    x11.xlib.utf8SetWMProperties              = (PFN_Xutf8SetWMProperties)                OSModule.load(x11.xlib.handle, "Xutf8SetWMProperties");
+    
+    return true;
+}
+void linux_unload_libs(void) {
+    if(x11.xlib.handle != NULL) {
+        OSModule.close(x11.xlib.handle);
+    }
+}
+
+
+
+
+
+// WIN32
+// Window procedure for the hidden helper window
+static LRESULT CALLBACK win32_helperWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg)
+    {
+        case WM_DISPLAYCHANGE:
+            _glfwPollMonitorsWin32();
+            break;
+
+        case WM_DEVICECHANGE:
+        {
+            if (!_glfw.joysticksInitialized)
+                break;
+
+            if (wParam == DBT_DEVICEARRIVAL)
+            {
+                DEV_BROADCAST_HDR* dbh = (DEV_BROADCAST_HDR*) lParam;
+                if (dbh && dbh->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE)
+                    _glfwDetectJoystickConnectionWin32();
+            }
+            else if (wParam == DBT_DEVICEREMOVECOMPLETE)
+            {
+                DEV_BROADCAST_HDR* dbh = (DEV_BROADCAST_HDR*) lParam;
+                if (dbh && dbh->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE)
+                    _glfwDetectJoystickDisconnectionWin32();
+            }
+
+            break;
+        }
+    }
+
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+
+
+
+
+
+// Terminate the library
+static void terminate(void) {
+    int i;
+
+    memset(&_glfw.callbacks, 0, sizeof(_glfw.callbacks));
+
+    while (_glfw.windowListHead)
+        glfwDestroyWindow((GLFWwindow*) _glfw.windowListHead);
+
+    while (_glfw.cursorListHead)
+        glfwDestroyCursor((GLFWcursor*) _glfw.cursorListHead);
+
+    for (i = 0;  i < _glfw.monitorCount;  i++)
+    {
+        _GLFWmonitor* monitor = _glfw.monitors[i];
+        if (monitor->originalRamp.size)
+            _glfw.platform.setGammaRamp(monitor, &monitor->originalRamp);
+        _glfwFreeMonitor(monitor);
+    }
+
+    _glfw_free(_glfw.monitors);
+    _glfw.monitors = NULL;
+    _glfw.monitorCount = 0;
+
+    _glfw_free(_glfw.mappings);
+    _glfw.mappings = NULL;
+    _glfw.mappingCount = 0;
+
+
+
+    if (_glfw.vk.handle)
+        OSModule.close(_glfw.vk.handle);
+
+    _glfw.platform.terminateJoysticks();
+    _glfw.platform.terminate();
+
+    _glfw.initialized = GLFW_FALSE;
+
+    memset(&_glfw, 0, sizeof(_glfw));
+}
+
+
+
+
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwEnumerateGlobalProperties(VkfwGlobalProperties* pProperties) {
     if(pProperties == NULL) return VKFW_ERROR_INVALID_POINTER_VALUE;
     pProperties[0].majorVersion                = VKFW_VERSION_MAJOR;
     pProperties[0].minorVersion                = VKFW_VERSION_MINOR;
     pProperties[0].revisionVersion             = VKFW_VERSION_REVISION;
     pProperties[0].underlyingVersionString     = "VKFW 1.1 Native Starter Win32 X11, based on GLFW 3.4.0 code";    
-    pProperties[0].supportedPlatforms         = VKFW_INSTANCE_PLATFORM_WIN32 | VKFW_INSTANCE_PLATFORM_X11 | VKFW_INSTANCE_PLATFORM_NULL;
+    pProperties[0].supportedPlatforms         = VKFW_INSTANCE_PLATFORM_WIN32 | VKFW_INSTANCE_PLATFORM_X11;
     return VKFW_SUCCESS;
 }
 VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwCreateInstance(const VkfwInstanceCreateInfo* pCreateInfo, const VkfwAllocationCallbacks* pAllocator, VkfwInstance* pInstance) {    
@@ -35,82 +332,632 @@ VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwCreateInstance(const VkfwInstanceCrea
     if(pCreateInfo == NULL) return VKFW_ERROR_INVALID_POINTER_VALUE;
     if(pInstance == NULL) return VKFW_ERROR_INVALID_POINTER_VALUE;
     
+    
     initAllocator = pAllocator;
     
-    if(pAllocator == NULL) {
-        glfwInitAllocator(NULL);
-    } else {
+    if(pAllocator != NULL) {
         ourGLFWAllocator.allocate   = pAllocator[0].pfnAllocation;
         ourGLFWAllocator.reallocate = pAllocator[0].pfnReallocation;
         ourGLFWAllocator.deallocate = pAllocator[0].pfnFree;
         ourGLFWAllocator.user       = pAllocator[0].pUserData;
         if((ourGLFWAllocator.allocate == NULL) || (ourGLFWAllocator.reallocate == NULL) || (ourGLFWAllocator.deallocate == NULL)) return VKFW_ERROR_INVALID_POINTER_VALUE;
-        glfwInitAllocator(&ourGLFWAllocator);
+        _glfwInitAllocator = ourGLFWAllocator
     }
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
     
     if(pCreateInfo[0].sType != VKFW_STRUCTURE_TYPE_INSTANCE_CREATE_INFO)    return VKFW_ERROR_INVALID_ENUM_VALUE;
-    if(pCreateInfo[0].pNext != NULL)                                        return VKFW_ERROR_FEATURE_NOT_SUPPORTED;
+    
+    VkfwInstanceSystemReferenceInfo* pSystemReferenceInfo = (VkfwInstanceSystemReferenceInfo*) pCreateInfo[0].pNext;
+    while(pSystemReferenceInfo != NULL) {
+        if(pSystemReferenceInfo[0].sType == VKFW_STRUCTURE_TYPE_INSTANCE_SYSTEM_REFERENCE_INFO) break;
+        pSystemReferenceInfo = pSystemReferenceInfo[0].pNext;
+    }
+    if(pSystemReferenceInfo == NULL) return VKFW_ERROR_SYSTEM_REFERENCE_INFO_NOT_PROVIDED;
+    OSModuleOperations = pSystemReferenceInfo[0].desiredModuleOperations;
+    
+    if(OSModule.load(VKFW_GLOBAL_HANDLE, "STARTER_WE_ARE_ON_WIN32") != NULL) {
+        platform = WIN32;
+    } else {
+        platform = LINUX;
+    }
+    
     
     if(pCreateInfo[0].flags & VKFW_INSTANCE_CREATE_DISABLE_JOYSTICK_HAT_BUTTONS_BIT) {
-        glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_FALSE);
+        _glfwInitHints.hatButtons = GLFW_FALSE;
     } else {
-        glfwInitHint(GLFW_JOYSTICK_HAT_BUTTONS, GLFW_TRUE);
+        _glfwInitHints.hatButtons = GLFW_TRUE;
     }
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
     if(pCreateInfo[0].flags & VKFW_INSTANCE_CREATE_WAYLAND_DISABLE_LIBDECOR_BIT_WL) {
-        glfwInitHint(GLFW_WAYLAND_LIBDECOR, GLFW_WAYLAND_DISABLE_LIBDECOR);
+        _glfwInitHints.wl.libdecorMode = GLFW_WAYLAND_DISABLE_LIBDECOR;
     } else {
-        glfwInitHint(GLFW_WAYLAND_LIBDECOR, GLFW_WAYLAND_PREFER_LIBDECOR);
+        _glfwInitHints.wl.libdecorMode = GLFW_WAYLAND_PREFER_LIBDECOR;
     }
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
     if(pCreateInfo[0].flags & VKFW_INSTANCE_CREATE_X11_DISABLE_XCB_VULKAN_SURFACE_BIT_X11) {
-        glfwInitHint(GLFW_X11_XCB_VULKAN_SURFACE, GLFW_FALSE);
+        _glfwInitHints.x11.xcbVulkanSurface = GLFW_FALSE;
     } else {
-        glfwInitHint(GLFW_X11_XCB_VULKAN_SURFACE, GLFW_TRUE);
+        _glfwInitHints.x11.xcbVulkanSurface = GLFW_TRUE;
     }
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
     if(pCreateInfo[0].flags & VKFW_INSTANCE_CREATE_COCOA_DISABLE_MENUBAR_BIT_COCOA) {
-        glfwInitHint(GLFW_COCOA_MENUBAR, GLFW_FALSE);
+        _glfwInitHints.ns.menubar = GLFW_FALSE;
     } else {
-        glfwInitHint(GLFW_COCOA_MENUBAR, GLFW_TRUE);
+        _glfwInitHints.ns.menubar = GLFW_TRUE;
     }
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
     if(pCreateInfo[0].flags & VKFW_INSTANCE_CREATE_COCOA_DISABLE_CHDIR_RESOURCES_BIT_COCOA) {
-        glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_FALSE);
+        _glfwInitHints.ns.chdir = GLFW_FALSE;
     } else {
-        glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_TRUE);
+        _glfwInitHints.ns.chdir = GLFW_TRUE;
     }
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
-    
-    switch(pCreateInfo[0].desiredPlatform) {
-        case VKFW_INSTANCE_PLATFORM_DEFAULT : glfwInitHint(GLFW_PLATFORM, GLFW_ANY_PLATFORM);      break;
-        case VKFW_INSTANCE_PLATFORM_WIN32   : glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WIN32);    break;
-        case VKFW_INSTANCE_PLATFORM_COCOA   : glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_COCOA);    break;
-        case VKFW_INSTANCE_PLATFORM_WAYLAND : glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);  break;
-        case VKFW_INSTANCE_PLATFORM_X11     : glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);      break;
-        case VKFW_INSTANCE_PLATFORM_NULL    : glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_NULL);     break;
-        default: return VKFW_ERROR_INVALID_ENUM_VALUE;
+    switch(platform) {
+        case WIN32:
+            switch(pCreateInfo[0].desiredPlatform) {
+                case VKFW_INSTANCE_PLATFORM_DEFAULT :
+                case VKFW_INSTANCE_PLATFORM_WIN32   :
+                    break;
+                default: return VKFW_ERROR_PLATFORM_UNAVAILABLE;
+            }
+        break;
+        case LINUX:
+            switch(pCreateInfo[0].desiredPlatform) {
+                case VKFW_INSTANCE_PLATFORM_DEFAULT :
+                case VKFW_INSTANCE_PLATFORM_X11   :
+                    break;
+                default: return VKFW_ERROR_PLATFORM_UNAVAILABLE;
+            }
+        break;
+        default: return VKFW_ERROR_UNKNOWN;
     }
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
+    _glfwInitHints.vulkanLoader = pCreateInfo[0].desiredVulkanLoader;
     
-    glfwInitVulkanLoader(pCreateInfo[0].desiredVulkanLoader);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
     
-    int initCode = glfwInit();
     
-    if(!initCode) {
-        switch(glfwGetError(NULL)) {
-            case GLFW_PLATFORM_UNAVAILABLE: return VKFW_ERROR_PLATFORM_UNAVAILABLE;
-            case GLFW_PLATFORM_ERROR:       return VKFW_ERROR_PLATFORM_ERROR;
-            default: return VKFW_ERROR_UNKNOWN;
+    _glfw.hints.init = _glfwInitHints;
+    _glfw.allocator = _glfwInitAllocator;
+    if (!_glfw.allocator.allocate)
+    {
+        _glfw.allocator.allocate   = defaultAllocate;
+        _glfw.allocator.reallocate = defaultReallocate;
+        _glfw.allocator.deallocate = defaultDeallocate;
+    }
+
+
+    
+    
+    switch(platform) {
+        case WIN32:
+            const _GLFWplatform win32 = {
+                .platformID = GLFW_PLATFORM_WIN32,
+                .init = _glfwInitWin32,
+                .terminate = _glfwTerminateWin32,
+                .getCursorPos = _glfwGetCursorPosWin32,
+                .setCursorPos = _glfwSetCursorPosWin32,
+                .setCursorMode = _glfwSetCursorModeWin32,
+                .setRawMouseMotion = _glfwSetRawMouseMotionWin32,
+                .rawMouseMotionSupported = _glfwRawMouseMotionSupportedWin32,
+                .createCursor = _glfwCreateCursorWin32,
+                .createStandardCursor = _glfwCreateStandardCursorWin32,
+                .destroyCursor = _glfwDestroyCursorWin32,
+                .setCursor = _glfwSetCursorWin32,
+                .getScancodeName = _glfwGetScancodeNameWin32,
+                .getKeyScancode = _glfwGetKeyScancodeWin32,
+                .setClipboardString = _glfwSetClipboardStringWin32,
+                .getClipboardString = _glfwGetClipboardStringWin32,
+                .initJoysticks = _glfwInitJoysticksWin32,
+                .terminateJoysticks = _glfwTerminateJoysticksWin32,
+                .pollJoystick = _glfwPollJoystickWin32,
+                .getMappingName = _glfwGetMappingNameWin32,
+                .updateGamepadGUID = _glfwUpdateGamepadGUIDWin32,
+                .freeMonitor = _glfwFreeMonitorWin32,
+                .getMonitorPos = _glfwGetMonitorPosWin32,
+                .getMonitorContentScale = _glfwGetMonitorContentScaleWin32,
+                .getMonitorWorkarea = _glfwGetMonitorWorkareaWin32,
+                .getVideoModes = _glfwGetVideoModesWin32,
+                .getVideoMode = _glfwGetVideoModeWin32,
+                .getGammaRamp = _glfwGetGammaRampWin32,
+                .setGammaRamp = _glfwSetGammaRampWin32,
+                .createWindow = _glfwCreateWindowWin32,
+                .destroyWindow = _glfwDestroyWindowWin32,
+                .setWindowTitle = _glfwSetWindowTitleWin32,
+                .setWindowIcon = _glfwSetWindowIconWin32,
+                .getWindowPos = _glfwGetWindowPosWin32,
+                .setWindowPos = _glfwSetWindowPosWin32,
+                .getWindowSize = _glfwGetWindowSizeWin32,
+                .setWindowSize = _glfwSetWindowSizeWin32,
+                .setWindowSizeLimits = _glfwSetWindowSizeLimitsWin32,
+                .setWindowAspectRatio = _glfwSetWindowAspectRatioWin32,
+                .getFramebufferSize = _glfwGetFramebufferSizeWin32,
+                .getWindowFrameSize = _glfwGetWindowFrameSizeWin32,
+                .getWindowContentScale = _glfwGetWindowContentScaleWin32,
+                .iconifyWindow = _glfwIconifyWindowWin32,
+                .restoreWindow = _glfwRestoreWindowWin32,
+                .maximizeWindow = _glfwMaximizeWindowWin32,
+                .showWindow = _glfwShowWindowWin32,
+                .hideWindow = _glfwHideWindowWin32,
+                .requestWindowAttention = _glfwRequestWindowAttentionWin32,
+                .focusWindow = _glfwFocusWindowWin32,
+                .setWindowMonitor = _glfwSetWindowMonitorWin32,
+                .windowFocused = _glfwWindowFocusedWin32,
+                .windowIconified = _glfwWindowIconifiedWin32,
+                .windowVisible = _glfwWindowVisibleWin32,
+                .windowMaximized = _glfwWindowMaximizedWin32,
+                .windowHovered = _glfwWindowHoveredWin32,
+                .framebufferTransparent = _glfwFramebufferTransparentWin32,
+                .getWindowOpacity = _glfwGetWindowOpacityWin32,
+                .setWindowResizable = _glfwSetWindowResizableWin32,
+                .setWindowDecorated = _glfwSetWindowDecoratedWin32,
+                .setWindowFloating = _glfwSetWindowFloatingWin32,
+                .setWindowOpacity = _glfwSetWindowOpacityWin32,
+                .setWindowMousePassthrough = _glfwSetWindowMousePassthroughWin32,
+                .pollEvents = _glfwPollEventsWin32,
+                .waitEvents = _glfwWaitEventsWin32,
+                .waitEventsTimeout = _glfwWaitEventsTimeoutWin32,
+                .postEmptyEvent = _glfwPostEmptyEventWin32,
+                .getEGLPlatform = _glfwGetEGLPlatformWin32,
+                .getEGLNativeDisplay = _glfwGetEGLNativeDisplayWin32,
+                .getEGLNativeWindow = _glfwGetEGLNativeWindowWin32,
+                .getRequiredInstanceExtensions = _glfwGetRequiredInstanceExtensionsWin32,
+                .getPhysicalDevicePresentationSupport = _glfwGetPhysicalDevicePresentationSupportWin32,
+                .createWindowSurface = _glfwCreateWindowSurfaceWin32
+            };
+            _glfw.platform = win32;
+        break;
+        case LINUX:
+            const _GLFWplatform x11 = {
+                .platformID = GLFW_PLATFORM_X11,
+                .init = _glfwInitX11,
+                .terminate = _glfwTerminateX11,
+                .getCursorPos = _glfwGetCursorPosX11,
+                .setCursorPos = _glfwSetCursorPosX11,
+                .setCursorMode = _glfwSetCursorModeX11,
+                .setRawMouseMotion = _glfwSetRawMouseMotionX11,
+                .rawMouseMotionSupported = _glfwRawMouseMotionSupportedX11,
+                .createCursor = _glfwCreateCursorX11,
+                .createStandardCursor = _glfwCreateStandardCursorX11,
+                .destroyCursor = _glfwDestroyCursorX11,
+                .setCursor = _glfwSetCursorX11,
+                .getScancodeName = _glfwGetScancodeNameX11,
+                .getKeyScancode = _glfwGetKeyScancodeX11,
+                .setClipboardString = _glfwSetClipboardStringX11,
+                .getClipboardString = _glfwGetClipboardStringX11,
+                .initJoysticks = _glfwInitJoysticksLinux,
+                .terminateJoysticks = _glfwTerminateJoysticksLinux,
+                .pollJoystick = _glfwPollJoystickLinux,
+                .getMappingName = _glfwGetMappingNameLinux,
+                .updateGamepadGUID = _glfwUpdateGamepadGUIDLinux,
+                .freeMonitor = _glfwFreeMonitorX11,
+                .getMonitorPos = _glfwGetMonitorPosX11,
+                .getMonitorContentScale = _glfwGetMonitorContentScaleX11,
+                .getMonitorWorkarea = _glfwGetMonitorWorkareaX11,
+                .getVideoModes = _glfwGetVideoModesX11,
+                .getVideoMode = _glfwGetVideoModeX11,
+                .getGammaRamp = _glfwGetGammaRampX11,
+                .setGammaRamp = _glfwSetGammaRampX11,
+                .createWindow = _glfwCreateWindowX11,
+                .destroyWindow = _glfwDestroyWindowX11,
+                .setWindowTitle = _glfwSetWindowTitleX11,
+                .setWindowIcon = _glfwSetWindowIconX11,
+                .getWindowPos = _glfwGetWindowPosX11,
+                .setWindowPos = _glfwSetWindowPosX11,
+                .getWindowSize = _glfwGetWindowSizeX11,
+                .setWindowSize = _glfwSetWindowSizeX11,
+                .setWindowSizeLimits = _glfwSetWindowSizeLimitsX11,
+                .setWindowAspectRatio = _glfwSetWindowAspectRatioX11,
+                .getFramebufferSize = _glfwGetFramebufferSizeX11,
+                .getWindowFrameSize = _glfwGetWindowFrameSizeX11,
+                .getWindowContentScale = _glfwGetWindowContentScaleX11,
+                .iconifyWindow = _glfwIconifyWindowX11,
+                .restoreWindow = _glfwRestoreWindowX11,
+                .maximizeWindow = _glfwMaximizeWindowX11,
+                .showWindow = _glfwShowWindowX11,
+                .hideWindow = _glfwHideWindowX11,
+                .requestWindowAttention = _glfwRequestWindowAttentionX11,
+                .focusWindow = _glfwFocusWindowX11,
+                .setWindowMonitor = _glfwSetWindowMonitorX11,
+                .windowFocused = _glfwWindowFocusedX11,
+                .windowIconified = _glfwWindowIconifiedX11,
+                .windowVisible = _glfwWindowVisibleX11,
+                .windowMaximized = _glfwWindowMaximizedX11,
+                .windowHovered = _glfwWindowHoveredX11,
+                .framebufferTransparent = _glfwFramebufferTransparentX11,
+                .getWindowOpacity = _glfwGetWindowOpacityX11,
+                .setWindowResizable = _glfwSetWindowResizableX11,
+                .setWindowDecorated = _glfwSetWindowDecoratedX11,
+                .setWindowFloating = _glfwSetWindowFloatingX11,
+                .setWindowOpacity = _glfwSetWindowOpacityX11,
+                .setWindowMousePassthrough = _glfwSetWindowMousePassthroughX11,
+                .pollEvents = _glfwPollEventsX11,
+                .waitEvents = _glfwWaitEventsX11,
+                .waitEventsTimeout = _glfwWaitEventsTimeoutX11,
+                .postEmptyEvent = _glfwPostEmptyEventX11,
+                .getEGLPlatform = _glfwGetEGLPlatformX11,
+                .getEGLNativeDisplay = _glfwGetEGLNativeDisplayX11,
+                .getEGLNativeWindow = _glfwGetEGLNativeWindowX11,
+                .getRequiredInstanceExtensions = _glfwGetRequiredInstanceExtensionsX11,
+                .getPhysicalDevicePresentationSupport = _glfwGetPhysicalDevicePresentationSupportX11,
+                .createWindowSurface = _glfwCreateWindowSurfaceX11
+            };
+            _glfw.platform = x11;
+            // HACK: If the application has left the locale as "C" then both wide
+            //       character text input and explicit UTF-8 input via XIM will break
+            //       This sets the CTYPE part of the current locale from the environment
+            //       in the hope that it is set to something more sane than "C"
+            if (strcmp(setlocale(LC_CTYPE, NULL), "C") == 0)
+                setlocale(LC_CTYPE, "");
+
+            if (!linux_load_libs()) {
+                linux_unload_libs();
+                return VKFW_ERROR_PLATFORM_ERROR;
+            }
+            
+            XInitThreads();
+            XrmInitialize();
+
+            Display* display = XOpenDisplay(NULL);
+            if (!display) {
+                OSModule.close(module);
+                return VKFW_ERROR_PLATFORM_UNAVAILABLE;
+            }
+            _glfw.x11.display = display;
+        break;
+        default: return VKFW_ERROR_UNKNOWN;
+    }
+    
+    
+
+
+    switch(platform) {
+        case WIN32:
+        
+        
+            // Load necessary libraries (DLLs)
+            {
+                if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (const WCHAR*) &_glfw, (HMODULE*) &_glfw.win32.instance)) {
+                    terminate();
+                    return VKFW_ERROR_PLATFORM_ERROR;
+                }
+
+                if (!win32_load_libs()) {
+                    terminate();
+                    return VKFW_ERROR_PLATFORM_ERROR;
+                }
+                
+                
+                
+            }
+        
+
+            // Create key code translation tables
+            {
+                int scancode;
+
+                memset(_glfw.win32.keycodes, -1, sizeof(_glfw.win32.keycodes));
+                memset(_glfw.win32.scancodes, -1, sizeof(_glfw.win32.scancodes));
+
+                _glfw.win32.keycodes[0x00B] = GLFW_KEY_0;
+                _glfw.win32.keycodes[0x002] = GLFW_KEY_1;
+                _glfw.win32.keycodes[0x003] = GLFW_KEY_2;
+                _glfw.win32.keycodes[0x004] = GLFW_KEY_3;
+                _glfw.win32.keycodes[0x005] = GLFW_KEY_4;
+                _glfw.win32.keycodes[0x006] = GLFW_KEY_5;
+                _glfw.win32.keycodes[0x007] = GLFW_KEY_6;
+                _glfw.win32.keycodes[0x008] = GLFW_KEY_7;
+                _glfw.win32.keycodes[0x009] = GLFW_KEY_8;
+                _glfw.win32.keycodes[0x00A] = GLFW_KEY_9;
+                _glfw.win32.keycodes[0x01E] = GLFW_KEY_A;
+                _glfw.win32.keycodes[0x030] = GLFW_KEY_B;
+                _glfw.win32.keycodes[0x02E] = GLFW_KEY_C;
+                _glfw.win32.keycodes[0x020] = GLFW_KEY_D;
+                _glfw.win32.keycodes[0x012] = GLFW_KEY_E;
+                _glfw.win32.keycodes[0x021] = GLFW_KEY_F;
+                _glfw.win32.keycodes[0x022] = GLFW_KEY_G;
+                _glfw.win32.keycodes[0x023] = GLFW_KEY_H;
+                _glfw.win32.keycodes[0x017] = GLFW_KEY_I;
+                _glfw.win32.keycodes[0x024] = GLFW_KEY_J;
+                _glfw.win32.keycodes[0x025] = GLFW_KEY_K;
+                _glfw.win32.keycodes[0x026] = GLFW_KEY_L;
+                _glfw.win32.keycodes[0x032] = GLFW_KEY_M;
+                _glfw.win32.keycodes[0x031] = GLFW_KEY_N;
+                _glfw.win32.keycodes[0x018] = GLFW_KEY_O;
+                _glfw.win32.keycodes[0x019] = GLFW_KEY_P;
+                _glfw.win32.keycodes[0x010] = GLFW_KEY_Q;
+                _glfw.win32.keycodes[0x013] = GLFW_KEY_R;
+                _glfw.win32.keycodes[0x01F] = GLFW_KEY_S;
+                _glfw.win32.keycodes[0x014] = GLFW_KEY_T;
+                _glfw.win32.keycodes[0x016] = GLFW_KEY_U;
+                _glfw.win32.keycodes[0x02F] = GLFW_KEY_V;
+                _glfw.win32.keycodes[0x011] = GLFW_KEY_W;
+                _glfw.win32.keycodes[0x02D] = GLFW_KEY_X;
+                _glfw.win32.keycodes[0x015] = GLFW_KEY_Y;
+                _glfw.win32.keycodes[0x02C] = GLFW_KEY_Z;
+
+                _glfw.win32.keycodes[0x028] = GLFW_KEY_APOSTROPHE;
+                _glfw.win32.keycodes[0x02B] = GLFW_KEY_BACKSLASH;
+                _glfw.win32.keycodes[0x033] = GLFW_KEY_COMMA;
+                _glfw.win32.keycodes[0x00D] = GLFW_KEY_EQUAL;
+                _glfw.win32.keycodes[0x029] = GLFW_KEY_GRAVE_ACCENT;
+                _glfw.win32.keycodes[0x01A] = GLFW_KEY_LEFT_BRACKET;
+                _glfw.win32.keycodes[0x00C] = GLFW_KEY_MINUS;
+                _glfw.win32.keycodes[0x034] = GLFW_KEY_PERIOD;
+                _glfw.win32.keycodes[0x01B] = GLFW_KEY_RIGHT_BRACKET;
+                _glfw.win32.keycodes[0x027] = GLFW_KEY_SEMICOLON;
+                _glfw.win32.keycodes[0x035] = GLFW_KEY_SLASH;
+                _glfw.win32.keycodes[0x056] = GLFW_KEY_WORLD_2;
+
+                _glfw.win32.keycodes[0x00E] = GLFW_KEY_BACKSPACE;
+                _glfw.win32.keycodes[0x153] = GLFW_KEY_DELETE;
+                _glfw.win32.keycodes[0x14F] = GLFW_KEY_END;
+                _glfw.win32.keycodes[0x01C] = GLFW_KEY_ENTER;
+                _glfw.win32.keycodes[0x001] = GLFW_KEY_ESCAPE;
+                _glfw.win32.keycodes[0x147] = GLFW_KEY_HOME;
+                _glfw.win32.keycodes[0x152] = GLFW_KEY_INSERT;
+                _glfw.win32.keycodes[0x15D] = GLFW_KEY_MENU;
+                _glfw.win32.keycodes[0x151] = GLFW_KEY_PAGE_DOWN;
+                _glfw.win32.keycodes[0x149] = GLFW_KEY_PAGE_UP;
+                _glfw.win32.keycodes[0x045] = GLFW_KEY_PAUSE;
+                _glfw.win32.keycodes[0x039] = GLFW_KEY_SPACE;
+                _glfw.win32.keycodes[0x00F] = GLFW_KEY_TAB;
+                _glfw.win32.keycodes[0x03A] = GLFW_KEY_CAPS_LOCK;
+                _glfw.win32.keycodes[0x145] = GLFW_KEY_NUM_LOCK;
+                _glfw.win32.keycodes[0x046] = GLFW_KEY_SCROLL_LOCK;
+                _glfw.win32.keycodes[0x03B] = GLFW_KEY_F1;
+                _glfw.win32.keycodes[0x03C] = GLFW_KEY_F2;
+                _glfw.win32.keycodes[0x03D] = GLFW_KEY_F3;
+                _glfw.win32.keycodes[0x03E] = GLFW_KEY_F4;
+                _glfw.win32.keycodes[0x03F] = GLFW_KEY_F5;
+                _glfw.win32.keycodes[0x040] = GLFW_KEY_F6;
+                _glfw.win32.keycodes[0x041] = GLFW_KEY_F7;
+                _glfw.win32.keycodes[0x042] = GLFW_KEY_F8;
+                _glfw.win32.keycodes[0x043] = GLFW_KEY_F9;
+                _glfw.win32.keycodes[0x044] = GLFW_KEY_F10;
+                _glfw.win32.keycodes[0x057] = GLFW_KEY_F11;
+                _glfw.win32.keycodes[0x058] = GLFW_KEY_F12;
+                _glfw.win32.keycodes[0x064] = GLFW_KEY_F13;
+                _glfw.win32.keycodes[0x065] = GLFW_KEY_F14;
+                _glfw.win32.keycodes[0x066] = GLFW_KEY_F15;
+                _glfw.win32.keycodes[0x067] = GLFW_KEY_F16;
+                _glfw.win32.keycodes[0x068] = GLFW_KEY_F17;
+                _glfw.win32.keycodes[0x069] = GLFW_KEY_F18;
+                _glfw.win32.keycodes[0x06A] = GLFW_KEY_F19;
+                _glfw.win32.keycodes[0x06B] = GLFW_KEY_F20;
+                _glfw.win32.keycodes[0x06C] = GLFW_KEY_F21;
+                _glfw.win32.keycodes[0x06D] = GLFW_KEY_F22;
+                _glfw.win32.keycodes[0x06E] = GLFW_KEY_F23;
+                _glfw.win32.keycodes[0x076] = GLFW_KEY_F24;
+                _glfw.win32.keycodes[0x038] = GLFW_KEY_LEFT_ALT;
+                _glfw.win32.keycodes[0x01D] = GLFW_KEY_LEFT_CONTROL;
+                _glfw.win32.keycodes[0x02A] = GLFW_KEY_LEFT_SHIFT;
+                _glfw.win32.keycodes[0x15B] = GLFW_KEY_LEFT_SUPER;
+                _glfw.win32.keycodes[0x137] = GLFW_KEY_PRINT_SCREEN;
+                _glfw.win32.keycodes[0x138] = GLFW_KEY_RIGHT_ALT;
+                _glfw.win32.keycodes[0x11D] = GLFW_KEY_RIGHT_CONTROL;
+                _glfw.win32.keycodes[0x036] = GLFW_KEY_RIGHT_SHIFT;
+                _glfw.win32.keycodes[0x15C] = GLFW_KEY_RIGHT_SUPER;
+                _glfw.win32.keycodes[0x150] = GLFW_KEY_DOWN;
+                _glfw.win32.keycodes[0x14B] = GLFW_KEY_LEFT;
+                _glfw.win32.keycodes[0x14D] = GLFW_KEY_RIGHT;
+                _glfw.win32.keycodes[0x148] = GLFW_KEY_UP;
+
+                _glfw.win32.keycodes[0x052] = GLFW_KEY_KP_0;
+                _glfw.win32.keycodes[0x04F] = GLFW_KEY_KP_1;
+                _glfw.win32.keycodes[0x050] = GLFW_KEY_KP_2;
+                _glfw.win32.keycodes[0x051] = GLFW_KEY_KP_3;
+                _glfw.win32.keycodes[0x04B] = GLFW_KEY_KP_4;
+                _glfw.win32.keycodes[0x04C] = GLFW_KEY_KP_5;
+                _glfw.win32.keycodes[0x04D] = GLFW_KEY_KP_6;
+                _glfw.win32.keycodes[0x047] = GLFW_KEY_KP_7;
+                _glfw.win32.keycodes[0x048] = GLFW_KEY_KP_8;
+                _glfw.win32.keycodes[0x049] = GLFW_KEY_KP_9;
+                _glfw.win32.keycodes[0x04E] = GLFW_KEY_KP_ADD;
+                _glfw.win32.keycodes[0x053] = GLFW_KEY_KP_DECIMAL;
+                _glfw.win32.keycodes[0x135] = GLFW_KEY_KP_DIVIDE;
+                _glfw.win32.keycodes[0x11C] = GLFW_KEY_KP_ENTER;
+                _glfw.win32.keycodes[0x059] = GLFW_KEY_KP_EQUAL;
+                _glfw.win32.keycodes[0x037] = GLFW_KEY_KP_MULTIPLY;
+                _glfw.win32.keycodes[0x04A] = GLFW_KEY_KP_SUBTRACT;
+
+                for (scancode = 0;  scancode < 512;  scancode++)
+                {
+                    if (_glfw.win32.keycodes[scancode] > 0)
+                        _glfw.win32.scancodes[_glfw.win32.keycodes[scancode]] = scancode;
+                }
+            }
+            
+            _glfwUpdateKeyNamesWin32();
+
+            if (_glfwIsWindows10Version1703OrGreaterWin32())
+                SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            else if (IsWindows8Point1OrGreater())
+                SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE);
+            else if (IsWindowsVistaOrGreater())
+                SetProcessDPIAware();
+
+            // Creates a dummy window for behind-the-scenes work
+            {
+                MSG msg;
+                WNDCLASSEXW wc = { sizeof(wc) };
+
+                wc.style         = CS_OWNDC;
+                wc.lpfnWndProc   = (WNDPROC) win32_helperWindowProc;
+                wc.hInstance     = _glfw.win32.instance;
+                wc.lpszClassName = L"GLFW3 Helper";
+
+                _glfw.win32.helperWindowClass = RegisterClassExW(&wc);
+                if (!_glfw.win32.helperWindowClass) {
+                    terminate();
+                    return VKFW_ERROR_PLATFORM_ERROR;
+                }
+
+                _glfw.win32.helperWindowHandle =
+                    CreateWindowExW(WS_EX_OVERLAPPEDWINDOW,
+                                    MAKEINTATOM(_glfw.win32.helperWindowClass),
+                                    L"GLFW message window",
+                                    WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
+                                    0, 0, 1, 1,
+                                    NULL, NULL,
+                                    _glfw.win32.instance,
+                                    NULL);
+
+                if (!_glfw.win32.helperWindowHandle)
+                {
+                    terminate();
+                    return VKFW_ERROR_PLATFORM_ERROR;
+                }
+
+                // HACK: The command to the first ShowWindow call is ignored if the parent
+                //       process passed along a STARTUPINFO, so clear that with a no-op call
+                ShowWindow(_glfw.win32.helperWindowHandle, SW_HIDE);
+
+                // Register for HID device notifications
+                {
+                    DEV_BROADCAST_DEVICEINTERFACE_W dbi;
+                    ZeroMemory(&dbi, sizeof(dbi));
+                    dbi.dbcc_size = sizeof(dbi);
+                    dbi.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+                    dbi.dbcc_classguid = GUID_DEVINTERFACE_HID;
+
+                    _glfw.win32.deviceNotificationHandle =
+                        RegisterDeviceNotificationW(_glfw.win32.helperWindowHandle,
+                                                    (DEV_BROADCAST_HDR*) &dbi,
+                                                    DEVICE_NOTIFY_WINDOW_HANDLE);
+                }
+
+                while (PeekMessageW(&msg, _glfw.win32.helperWindowHandle, 0, 0, PM_REMOVE))
+                {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+
+            _glfwPollMonitorsWin32();
+        break;
+        case LINUX:
+
+            if (_glfw.x11.xlib.utf8LookupString && _glfw.x11.xlib.utf8SetWMProperties)
+                _glfw.x11.xlib.utf8 = GLFW_TRUE;
+
+            _glfw.x11.screen = DefaultScreen(_glfw.x11.display);
+            _glfw.x11.root = RootWindow(_glfw.x11.display, _glfw.x11.screen);
+            _glfw.x11.context = XUniqueContext();
+
+            getSystemContentScale(&_glfw.x11.contentScaleX, &_glfw.x11.contentScaleY);
+
+            if (!createEmptyEventPipe())
+            {
+                terminate();
+                switch(glfwGetError(NULL)) {
+                    case GLFW_PLATFORM_UNAVAILABLE: return VKFW_ERROR_PLATFORM_UNAVAILABLE;
+                    case GLFW_PLATFORM_ERROR:       return VKFW_ERROR_PLATFORM_ERROR;
+                    default: return VKFW_ERROR_UNKNOWN;
+                }
+            }
+
+            if (!initExtensions())
+            {
+                terminate();
+                switch(glfwGetError(NULL)) {
+                    case GLFW_PLATFORM_UNAVAILABLE: return VKFW_ERROR_PLATFORM_UNAVAILABLE;
+                    case GLFW_PLATFORM_ERROR:       return VKFW_ERROR_PLATFORM_ERROR;
+                    default: return VKFW_ERROR_UNKNOWN;
+                }
+            }
+
+            _glfw.x11.helperWindowHandle = createHelperWindow();
+            _glfw.x11.hiddenCursorHandle = createHiddenCursor();
+
+            if (XSupportsLocale() && _glfw.x11.xlib.utf8)
+            {
+                XSetLocaleModifiers("");
+
+                // If an IM is already present our callback will be called right away
+                XRegisterIMInstantiateCallback(_glfw.x11.display,
+                                               NULL, NULL, NULL,
+                                               inputMethodInstantiateCallback,
+                                               NULL);
+            }
+
+            _glfwPollMonitorsX11();
+        break;
+        default: return VKFW_ERROR_UNKNOWN;
+    }
+
+
+
+    
+    // Adds the built-in set of gamepad mappings
+    {
+        size_t i;
+        const size_t count = sizeof(_glfwDefaultMappings) / sizeof(char*);
+        _glfw.mappings = _glfw_calloc(count, sizeof(_GLFWmapping));
+
+        for (i = 0;  i < count;  i++)
+        {
+            if (parseMapping(&_glfw.mappings[_glfw.mappingCount], _glfwDefaultMappings[i]))
+                _glfw.mappingCount++;
         }
     }
+
     
-    glfwSetMonitorCallback((GLFWmonitorfun) pCreateInfo[0].callbacks.monitorConnection);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
-    glfwSetJoystickCallback((GLFWjoystickfun) pCreateInfo[0].callbacks.joystickConnection);
-    if(glfwGetError(NULL)) return VKFW_ERROR_UNKNOWN;
+    switch(platform) {
+        case WIN32:
+            QueryPerformanceFrequency((LARGE_INTEGER*) &_glfw.timer.win32.frequency);
+        break;
+        case LINUX:
+            _glfw.timer.posix.clock = CLOCK_REALTIME;
+            _glfw.timer.posix.frequency = 1000000000;
+            
+            struct timespec ts;
+            if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
+                _glfw.timer.posix.clock = CLOCK_MONOTONIC;
+        break;
+        default: return VKFW_ERROR_UNKNOWN;
+    }
+    
+    
+    _glfw.timer.offset = _glfwPlatformGetTimerValue();
+
+    _glfw.initialized = GLFW_TRUE;
+
+
+    {
+        // The default is OpenGL with minimum version 1.0
+        memset(&_glfw.hints.context, 0, sizeof(_glfw.hints.context));
+        _glfw.hints.context.client = GLFW_OPENGL_API;
+        _glfw.hints.context.source = GLFW_NATIVE_CONTEXT_API;
+        _glfw.hints.context.major  = 1;
+        _glfw.hints.context.minor  = 0;
+
+        // The default is a focused, visible, resizable window with decorations
+        memset(&_glfw.hints.window, 0, sizeof(_glfw.hints.window));
+        _glfw.hints.window.resizable    = GLFW_TRUE;
+        _glfw.hints.window.visible      = GLFW_TRUE;
+        _glfw.hints.window.decorated    = GLFW_TRUE;
+        _glfw.hints.window.focused      = GLFW_TRUE;
+        _glfw.hints.window.autoIconify  = GLFW_TRUE;
+        _glfw.hints.window.centerCursor = GLFW_TRUE;
+        _glfw.hints.window.focusOnShow  = GLFW_TRUE;
+        _glfw.hints.window.xpos         = GLFW_ANY_POSITION;
+        _glfw.hints.window.ypos         = GLFW_ANY_POSITION;
+        _glfw.hints.window.scaleFramebuffer = GLFW_TRUE;
+
+        // The default is 24 bits of color, 24 bits of depth and 8 bits of stencil,
+        // double buffered
+        memset(&_glfw.hints.framebuffer, 0, sizeof(_glfw.hints.framebuffer));
+        _glfw.hints.framebuffer.redBits      = 8;
+        _glfw.hints.framebuffer.greenBits    = 8;
+        _glfw.hints.framebuffer.blueBits     = 8;
+        _glfw.hints.framebuffer.alphaBits    = 8;
+        _glfw.hints.framebuffer.depthBits    = 24;
+        _glfw.hints.framebuffer.stencilBits  = 8;
+        _glfw.hints.framebuffer.doublebuffer = GLFW_TRUE;
+
+        // The default is to select the highest available refresh rate
+        _glfw.hints.refreshRate = GLFW_DONT_CARE;
+    }
+    
+    
+    
+    _glfw.callbacks.monitor = (GLFWmonitorfun) pCreateInfo[0].callbacks.monitorConnection;
+    if (initJoysticks()) {
+        _glfw.callbacks.joystick = (GLFWjoystickfun) pCreateInfo[0].callbacks.joystickConnection;
+    }
     
     vfkwInstanceInitialized = VKFW_TRUE;
     pInstance[0] = (VkfwInstance) &instanceHandleAddress;
@@ -121,7 +968,7 @@ VKFWAPI_ATTR VkfwResult   VKFWAPI_CALL vkfwDestroyInstance(VkfwInstance instance
     if(instance != (VkfwInstance) &instanceHandleAddress) return VKFW_ERROR_INVALID_HANDLE;
     if(pAllocator != initAllocator) return VKFW_ERROR_INVALID_POINTER_VALUE;
     
-    glfwTerminate();
+    terminate();
     switch(glfwGetError(NULL)) {
         case GLFW_NO_ERROR:             break;
         case GLFW_PLATFORM_ERROR:       return VKFW_ERROR_PLATFORM_ERROR;

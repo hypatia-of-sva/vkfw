@@ -105,6 +105,7 @@ typedef enum VkfwResult {
     VKFW_ERROR_FEATURE_NOT_SUPPORTED            = -12,
     VKFW_ERROR_PLATFORM_UNAVAILABLE             = -13,
     VKFW_ERROR_RESULT_NOT_AVAILABLE             = -14,
+    VKFW_ERROR_SYSTEM_REFERENCE_INFO_NOT_PROVIDED = -15,
     VKFW_RESULT_MAX_ENUM                        = 0x7FFFFFFF
 } VkfwResult;
 typedef enum VkfwStructureType {
@@ -556,7 +557,8 @@ typedef struct VkfwAllocationCallbacks {
     PFN_vkfwFreeFunction                      pfnFree;
 } VkfwAllocationCallbacks;
 
-#define VKFW_GLOBAL_HANDLE NULL
+#define VKFW_GLOBAL_HANDLE      NULL
+#define VKFW_DEFAULT_FLAGS      // look up default dlopen flags...
 typedef void* (* VkfwModuleOpen)(const char* name, int32_t flags);
 typedef void* (* VkfwModuleLoad)(void* handle, const char* name);
 typedef void  (* VkfwModuleClose)(void* handle);
